@@ -8,6 +8,7 @@ import os, sys
 sys.path.insert(0, '/root/geopolitical-risk')
 from charts import (fig_to_png, chart_timeseries_comparison, chart_risk_heatmap,
                     chart_political_vs_economic, chart_anomaly_detection, chart_risk_forecast_comparison)
+from map_charts import (chart_region_risk_bars, chart_world_risk_map, chart_component_breakdown, fig_to_png as map_fig_to_png)
 from data_sources import get_conflict_timeseries, get_economic_timeseries
 
 app = Flask(__name__)
@@ -75,6 +76,34 @@ def chart_hm_live():
         return png_response(fig)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/chart/world-map')
+def chart_world():
+    try:
+        fig = chart_world_risk_map()
+        return png_response(fig)
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+@app.route('/api/chart/region-bars')
+def chart_regions():
+    try:
+        fig = chart_region_risk_bars()
+        return png_response(fig)
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+@app.route('/api/chart/component-breakdown')
+def chart_components():
+    try:
+        fig = chart_component_breakdown()
+        return png_response(fig)
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 18791))
