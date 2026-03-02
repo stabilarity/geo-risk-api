@@ -43,3 +43,32 @@ Export publication-quality visualizations via REST API for embedding in research
 Articles always reference live charts from this API.
 Chart URLs: http://localhost:18791/api/chart/...
 Public: https://hub.stabilarity.com/geopolitical-risk-api/... (proxied via WP or nginx)
+
+## SPEC v2.0 — Iteration 2 (2026-03-02)
+
+### What's Working (DO NOT BREAK)
+- Leaflet map with GeoJSON choropleth
+- Chart.js interactive charts (breakdown, trend, top-20, histogram, radar)
+- Country selector → live chart rebuild
+- Tab architecture (separate JS files loaded dynamically)
+- Flask API PNG exports (6 endpoints)
+
+### New Features (v2.0)
+1. **Real data integration** — /api/data/countries endpoint with 85+ countries
+2. **Country comparison mode** — Select 2-5 countries, grouped bar + trend overlay
+3. **Map search** — Search box to fly to country on map
+4. **Data freshness** — WSI.DATA_META with lastUpdated timestamp
+
+### API endpoint: /api/data/countries
+- Returns JSON: {countries: [{iso3, name, score, warRisk, politicalRisk, economicRisk, category, lastUpdated}], count, weights, source}
+- Weights: war=0.45, political=0.35, economic=0.20
+
+### Article: "Economic Vulnerability and Political Fragility: Are They the Same Crisis?"
+- Three divergence archetypes (Type A/B/C)
+- Correlation analysis across 85+ countries
+- ~2800 words, category 70
+
+### Implementation Rules
+- ALWAYS check existing files before modifying
+- Add features additively — never remove existing functionality
+- Test each change after backend modifications
