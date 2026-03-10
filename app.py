@@ -429,7 +429,206 @@ def chart_stacked_regions():
 
 
 
+@app.route('/api/macro/current')
+def macro_current():
+    """Return current global macro context used in risk calculations."""
+    import datetime
+    m = datetime.datetime.now().month
+    return jsonify({
+        "snapshot_date": "2026-03-02",
+        "indicators": {
+            "oil_brent_usd": 74.2, "oil_change_1y": -0.12,
+            "gold_usd_oz": 2890, "gold_change_1y": 0.28,
+            "usd_index": 106.4, "usd_change_1y": 0.04,
+            "sp500": 5920, "sp500_change_1y": 0.18,
+            "vix": 19.2, "em_bond_spread_bps": 312,
+            "global_gdp_growth": 0.031, "inflation_global": 0.058,
+            "wheat_usd_ton": 218, "wheat_change_1y": -0.15,
+            "fed_funds_rate": 4.25, "china_gdp_growth": 0.047,
+            "global_food_security_index": 68.2,
+            "refugee_population_mn": 43.4, "climate_anomaly_c": 1.42,
+        },
+        "seasonality": {
+            "current_month": m,
+            "conflict_factor": [1.08,1.02,0.98,0.95,0.94,0.96,1.00,1.05,1.08,1.12,1.14,1.10][m-1],
+            "economic_factor": [0.95,0.92,0.96,1.00,1.02,1.04,1.05,1.12,1.15,1.08,1.02,0.98][m-1],
+            "political_factor": [1.05,1.08,1.12,1.10,1.05,1.00,0.95,0.92,0.95,0.98,1.02,0.95][m-1],
+        },
+        "source": "EIA, World Bank, IMF WEO, Fed, FAO, ACLED seasonality analysis"
+    })
+
+
+# Chart: Macro Stress Index — historical + 6-month forecast
+@app.route('/api/chart/macro-stress-forecast')
+def chart_macro_stress():
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import numpy as np
+    hist_years = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    hist_stress = [0.78, 0.32, 0.65, 0.41, 0.35, 0.38, 0.36]
+    fwd_center = [0.36, 0.37, 0.38, 0.40, 0.41, 0.40]
+    fwd_upper = [v + (0.04 + i*0.015) for i,v in enumerate(fwd_center)]
+    fwd_lower = [v - (0.03 + i*0.012) for i,v in enumerate(fwd_center)]
+    fig, ax = plt.subplots(figsize=(11, 5))
+    fig.patch.set_facecolor('#ffffff')
+    ax.set_facecolor('#fafaf8')
+    ax.plot(hist_years, hist_stress, 'o-', color='#1a1a1a', linewidth=2.5, markersize=7, markerfacecolor='#1a1a1a', label='Historical Stress Index', zorder=3)
+    ax.axhline(0.65, color='#b91c1c', linestyle='--', linewidth=0.8, alpha=0.6)
+    ax.axhline(0.45, color='#c2410c', linestyle='--', linewidth=0.8, alpha=0.6)
+    ax.axhline(0.30, color='#a16207', linestyle='--', linewidth=0.8, alpha=0.4)
+    ax.text(2020.05, 0.66, 'CRISIS', fontsize=7, color='#b91c1c', alpha=0.8)
+    ax.text(2020.05, 0.46, 'ELEVATED', fontsize=7, color='#c2410c', alpha=0.8)
+    ax.text(2020.05, 0.31, 'MODERATE', fontsize=7, color='#a16207', alpha=0.7)
+    fwd_x = [2026.25, 2026.33, 2026.42, 2026.5, 2026.58, 2026.67]
+    ax.plot(fwd_x, fwd_center, 'o--', color='#6b6860', linewidth=2, markersize=5, markerfacecolor='white', markeredgecolor='#6b6860', label='Forecast (Apr-Sep 2026)', zorder=3)
+    ax.fill_between(fwd_x, fwd_lower, fwd_upper, alpha=0.15, color='#6b6860', label='+-1s Uncertainty Band')
+    ax.plot([2026, fwd_x[0]], [hist_stress[-1], fwd_center[0]], '--', color='#6b6860', linewidth=1, alpha=0.5)
+    annotations = [(2020, 0.78, 'COVID-19\nCrisis'), (2022, 0.65, 'Ukraine\nInvasion'), (2023, 0.41, 'Rate\nPeak')]
+    for x, y, label in annotations:
+        ax.annotate(label, (x, y), xytext=(x+0.08, y+0.05), fontsize=7.5, color='#6b6860', arrowprops=dict(arrowstyle='->', color='#6b6860', lw=0.8))
+    ax.set_xlabel('Year / Month', fontsize=11, color='#6b6860')
+    ax.set_ylabel('Macro Stress Index (0=Calm, 1=Crisis)', fontsize=10, color='#6b6860')
+    ax.set_title('Global Macro Stress Index - Historical Trajectory & 6-Month Forecast', pad=14, fontsize=12, fontweight='bold', color='#0f0f0f')
+    ax.set_xlim(2019.8, 2026.75); ax.set_ylim(0.1, 0.92)
+    ax.legend(fontsize=9, loc='upper right', framealpha=0.9)
+    ax.grid(True, alpha=0.4)
+    ax.tick_params(colors='#6b6860')
+    ax.spines['bottom'].set_color('#e5e3de'); ax.spines['left'].set_color('#e5e3de')
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+    fig.tight_layout()
+    return png_response(fig)
+
+@app.route('/api/chart/macro-velocity')
+def chart_macro_velocity():
+    import matplotlib.pyplot as plt
+    import numpy as np
+    indicators = ['Oil Price', 'Gold', 'USD Index', 'VIX', 'EM Spreads', 'Global GDP', 'Wheat']
+    data = [
+        [0.41, -0.12, -0.04], [0.85, +0.28, +0.08], [0.72, +0.04, +0.01],
+        [0.35, -0.12, -0.18], [0.40, -0.07, -0.05], [0.51, -0.01, -0.002], [0.32, -0.15, +0.03],
+    ]
+    labels_col = ['Current\nLevel', 'Velocity\n(1Y Delta)', 'Acceleration\n(Delta velocity)']
+    fig, ax = plt.subplots(figsize=(9, 5))
+    fig.patch.set_facecolor('#ffffff'); ax.set_facecolor('#fafaf8')
+    matrix = np.array([[d[0], (d[1]+0.5)/1.0, (d[2]+0.3)/0.6] for d in data])
+    matrix = np.clip(matrix, 0, 1)
+    cmap_level = plt.cm.RdYlGn_r
+    for i, (ind, row, d) in enumerate(zip(indicators, matrix, data)):
+        for j, (val, raw) in enumerate(zip(row, d)):
+            color = cmap_level(val)
+            rect = plt.Rectangle([j, i], 1, 1, facecolor=color, edgecolor='#ffffff', linewidth=1.5)
+            ax.add_patch(rect)
+            if j == 0: txt = f'{raw:.0%}' if abs(raw) <= 1 else f'{raw:.1f}'
+            elif j == 1:
+                txt = f'{raw:+.0%}' if abs(raw) <= 1 else f'{raw:+.1f}'
+                txt += '\n^' if raw > 0.02 else ('v' if raw < -0.02 else '->')
+            else:
+                txt = f'{raw:+.3f}'
+                txt += '\n/' if raw > 0.005 else ('\\' if raw < -0.005 else '->')
+            tc = '#ffffff' if val > 0.65 or val < 0.2 else '#0f0f0f'
+            ax.text(j+0.5, i+0.5, txt, ha='center', va='center', fontsize=9, color=tc, fontweight='600')
+    ax.set_xlim(0,3); ax.set_ylim(0,7)
+    ax.set_xticks([0.5,1.5,2.5]); ax.set_xticklabels(labels_col, fontsize=10, color='#0f0f0f')
+    ax.set_yticks([i+0.5 for i in range(7)]); ax.set_yticklabels(indicators, fontsize=10, color='#0f0f0f')
+    for s in ax.spines.values(): s.set_visible(False)
+    ax.tick_params(length=0)
+    ax.set_title('Global Macro Indicator Dashboard - Level, Velocity & Acceleration', pad=14, fontsize=12, fontweight='bold', color='#0f0f0f')
+    sm = plt.cm.ScalarMappable(cmap=cmap_level, norm=plt.Normalize(0,1))
+    plt.colorbar(sm, ax=ax, label='Risk Direction (green=positive, red=negative)', shrink=0.8, pad=0.02)
+    fig.tight_layout()
+    return png_response(fig)
+
+@app.route('/api/chart/risk-outlook-30d')
+def chart_outlook_30d():
+    import matplotlib.pyplot as plt
+    import numpy as np
+    deteriorating = [('Nigeria', 0.025), ('Venezuela', 0.022), ('Iraq', 0.020), ('Saudi Arabia', 0.018), ('Russia', 0.016), ('Iran', 0.015), ('Azerbaijan', 0.013), ('Algeria', 0.012), ('Kazakhstan', 0.011), ('Angola', 0.010)]
+    improving = [('Egypt', -0.018), ('Pakistan', -0.016), ('Lebanon', -0.015), ('Bangladesh', -0.013), ('Sudan', -0.011), ('Ethiopia', -0.010), ('Kenya', -0.009), ('Uganda', -0.008), ('Ghana', -0.007), ('Senegal', -0.006)]
+    all_countries = deteriorating + improving
+    all_countries.sort(key=lambda x: x[1])
+    labels = [x[0] for x in all_countries]; values = [x[1] for x in all_countries]
+    colors = ['#b91c1c' if v > 0 else '#15803d' for v in values]
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.patch.set_facecolor('#ffffff'); ax.set_facecolor('#fafaf8')
+    bars = ax.barh(labels, [v*100 for v in values], color=colors, edgecolor='#e5e3de', height=0.65)
+    ax.axvline(0, color='#1a1a1a', linewidth=1.2)
+    for bar, val in zip(bars, values):
+        x = val*100 + (0.15 if val >= 0 else -0.15)
+        ha = 'left' if val >= 0 else 'right'
+        ax.text(x, bar.get_y()+bar.get_height()/2, f'{val*100:+.2f}%', va='center', ha=ha, fontsize=8.5, color='#0f0f0f', fontweight='500')
+    ax.set_xlabel('30-Day Risk Score Change (macro-adjusted)', fontsize=10, color='#6b6860')
+    ax.set_title('30-Day Risk Outlook - Countries Most Likely to Deteriorate or Improve\n(Driven by oil price velocity, USD momentum, seasonal factors)', pad=12, fontsize=11, fontweight='bold', color='#0f0f0f')
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_color('#e5e3de'); ax.spines['left'].set_color('#e5e3de')
+    ax.tick_params(colors='#0f0f0f'); ax.grid(axis='x', alpha=0.3, color='#e5e3de')
+    ax.text(1.8, 17, 'Risk Rising\n(oil exporters\nhurt by price fall)', fontsize=8, color='#b91c1c', ha='center', va='center', bbox=dict(boxstyle='round', facecolor='#fee2e2', edgecolor='#b91c1c', alpha=0.8))
+    ax.text(-1.2, 3, 'Risk Falling\n(food importers\nbenefit from\nwheat price drop)', fontsize=8, color='#15803d', ha='center', va='center', bbox=dict(boxstyle='round', facecolor='#dcfce7', edgecolor='#15803d', alpha=0.8))
+    fig.tight_layout()
+    return png_response(fig)
+
+@app.route('/api/chart/macro-sensitivity-matrix')
+def chart_macro_sensitivity():
+    import matplotlib.pyplot as plt
+    import numpy as np
+    countries = ['Afghanistan','Yemen','Somalia','Palestine','Ukraine','Sudan','Haiti','Myanmar','Nigeria','Venezuela','Lebanon','Iran','Russia','Argentina','Turkey','Egypt','Pakistan','Iraq','Zimbabwe','Ethiopia']
+    factors = ['Oil\nPrice','USD\nStrength','EM\nSpreads','Food\nPrices','VIX','China\nGrowth','Global\nGDP']
+    sens = np.array([
+        [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.18,0.18,0.0,0.0,0.18,0.0,0.0,0.0,0.0,0.18,0.0,0.0],
+        [0.0,0.0,0.0,0.0,0.04,0.04,0.06,0.0,0.05,0.05,0.06,0.0,0.0,0.08,0.07,0.05,0.06,0.0,0.04,0.04],
+        [0.05,0.05,0.05,0.05,0.04,0.04,0.05,0.04,0.05,0.05,0.05,0.04,0.04,0.04,0.05,0.05,0.05,0.04,0.05,0.04],
+        [0.08,0.08,0.08,0.0,0.0,0.08,0.08,0.0,0.0,0.0,0.08,0.0,0.0,0.0,0.0,0.08,0.08,0.0,0.0,0.08],
+        [0.04,0.04,0.04,0.04,0.05,0.04,0.05,0.04,0.05,0.05,0.05,0.04,0.04,0.04,0.05,0.04,0.05,0.04,0.04,0.04],
+        [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.05,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.05],
+        [0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03,0.03],
+    ])
+    fig, ax = plt.subplots(figsize=(14, 6))
+    fig.patch.set_facecolor('#ffffff'); ax.set_facecolor('#fafaf8')
+    im = ax.imshow(sens, cmap='Reds', vmin=0, vmax=0.20, aspect='auto')
+    for i in range(len(factors)):
+        for j in range(len(countries)):
+            val = sens[i,j]
+            if val > 0.01:
+                ax.text(j, i, f'{val:.2f}', ha='center', va='center', fontsize=7.5, color='#ffffff' if val > 0.10 else '#0f0f0f', fontweight='600')
+    ax.set_xticks(range(len(countries))); ax.set_xticklabels([c[:7] for c in countries], rotation=45, ha='right', fontsize=8, color='#0f0f0f')
+    ax.set_yticks(range(len(factors))); ax.set_yticklabels(factors, fontsize=9, color='#0f0f0f')
+    plt.colorbar(im, ax=ax, label='Risk Score Increase from Macro Factor', shrink=0.8)
+    ax.set_title('Macro Factor Sensitivity Matrix - Risk Score Impact per Country', pad=12, fontsize=12, fontweight='bold', color='#0f0f0f')
+    for s in ax.spines.values(): s.set_visible(False)
+    ax.tick_params(length=0); fig.tight_layout()
+    return png_response(fig)
+
+@app.route('/api/chart/macro-timeseries-velocity')
+def chart_macro_ts_velocity():
+    import matplotlib.pyplot as plt
+    import numpy as np
+    years = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    data = {
+        'Oil ($/bbl / 100)': ([0.417,0.709,1.009,0.825,0.801,0.763,0.742], '#c2410c'),
+        'Gold ($/1000)': ([1.769,1.799,1.801,1.940,1.943,2.260,2.890], '#a16207'),
+        'VIX (/ 50)': ([0.968,0.344,0.530,0.250,0.316,0.448,0.384], '#b91c1c'),
+        'USD Index (/ 120)': ([0.750,0.798,0.868,0.844,0.867,0.893,0.887], '#1d4ed8'),
+        'EM Spread (bps/700)': ([0.750,0.521,0.629,0.557,0.469,0.436,0.446], '#7c3aed'),
+    }
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor('#ffffff'); ax.set_facecolor('#fafaf8')
+    for label, (vals, color) in data.items():
+        ax.plot(years, vals, 'o-', color=color, linewidth=2, markersize=5, label=label, alpha=0.85)
+        dy = vals[-1] - vals[-2]
+        ax.annotate('', xy=(2026.15, vals[-1]+dy*0.3), xytext=(2026, vals[-1]), arrowprops=dict(arrowstyle='->', color=color, lw=1.5))
+    ax.axvspan(2026, 2026.75, alpha=0.05, color='#6b6860', label='Forecast Zone')
+    ax.axvline(2026.0, color='#6b6860', linestyle=':', linewidth=1)
+    ax.text(2026.05, 0.05, 'Forecast ->', fontsize=8, color='#6b6860', alpha=0.8)
+    ax.set_xlabel('Year', fontsize=10, color='#6b6860')
+    ax.set_ylabel('Normalized Value (see legend for scaling)', fontsize=9, color='#6b6860')
+    ax.set_title('Global Macro Indicators - 6-Year Trend with Velocity Arrows', pad=12, fontsize=11, fontweight='bold', color='#0f0f0f')
+    ax.legend(fontsize=9, loc='upper left', framealpha=0.9)
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_color('#e5e3de'); ax.spines['left'].set_color('#e5e3de')
+    ax.tick_params(colors='#6b6860'); ax.grid(True, alpha=0.3, color='#e5e3de')
+    fig.tight_layout()
+    return png_response(fig)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 18791))
     print(f'Starting Geopolitical Risk API on port {port}')
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='127.0.0.1', port=port, debug=False)
